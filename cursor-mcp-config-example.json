@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "azure-devops": {
+      "command": "node",
+      "args": [
+        "/Users/cleberdasilvahensel/Desktop/source/ono-sendae/vibe-driven-development-kit/my_vibe/vibes/prototipos/mcp-azure-devops/dist/index.js"
+      ],
+      "env": {
+        "AZURE_DEVOPS_PAT": "seu_personal_access_token_aqui",
+        "AZURE_DEVOPS_ORG": "sua_organizacao",
+        "AZURE_DEVOPS_PROJECT": "seu_projeto",
+        "LOG_LEVEL": "info",
+        "NODE_ENV": "production"
+      }
+    }
+  }
+}
+
