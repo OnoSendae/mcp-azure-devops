@@ -897,22 +897,6 @@ SOFTWARE.
 
 ---
 
-## 🙏 Agradecimentos
-
-- **Anthropic** - Pela especificação do Model Context Protocol
-- **Microsoft** - Pela API e SDK do Azure DevOps
-- **Comunidade Open Source** - Por todas as bibliotecas utilizadas
-
----
-
-## 📞 Suporte
-
-- 🐛 **Issues**: [GitHub Issues](https://github.com/seu-usuario/mcp-azure-devops/issues)
-- 💬 **Discussões**: [GitHub Discussions](https://github.com/seu-usuario/mcp-azure-devops/discussions)
-- 📧 **Email**: seu-email@exemplo.com
-
----
-
 <div align="center">
 
 **Feito com ❤️ para a comunidade de desenvolvimento**
