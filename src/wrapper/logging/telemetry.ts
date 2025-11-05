@@ -3,6 +3,7 @@ interface RequestMetadata {
   success: boolean;
   duration: number;
   provider: string;
+  fallbackUsed?: boolean;
 }
 
 interface TelemetryMetrics {

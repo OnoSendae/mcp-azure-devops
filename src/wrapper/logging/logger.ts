@@ -1,15 +1,21 @@
 import pino from 'pino';
 
 const createLogger = () => {
-  const level = process.env.LOG_LEVEL || 'info';
+  const level = process.env.LOG_LEVEL || 'error';
   const isDev = process.env.NODE_ENV !== 'production';
+
+  const destination = pino.destination({
+    dest: 2,
+    sync: false
+  });
 
   const transport = isDev ? {
     target: 'pino-pretty',
     options: {
       colorize: true,
       translateTime: 'HH:MM:ss',
-      ignore: 'pid,hostname'
+      ignore: 'pid,hostname',
+      destination: 2
     }
   } : undefined;
 
@@ -20,7 +26,7 @@ const createLogger = () => {
       paths: ['headers.Authorization', '*.pat', '*.token', 'config.pat'],
       censor: '[REDACTED]'
     }
-  });
+  }, destination);
 };
 
 export const logger = createLogger();

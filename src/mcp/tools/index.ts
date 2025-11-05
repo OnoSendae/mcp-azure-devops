@@ -11,7 +11,25 @@ import {
   getWorkItemSchema,
   queryWorkItemsSchema,
   getMyTasksSchema,
-  getCriticalBugsSchema
+  getCriticalBugsSchema,
+  listIterationsSchema,
+  getIterationSchema,
+  createIterationSchema,
+  deleteIterationSchema,
+  listPullRequestsSchema,
+  createPullRequestSchema,
+  listRepositoriesSchema,
+  getRepositorySchema,
+  listTeamsSchema,
+  getTeamSchema,
+  createTeamSchema,
+  listWikisSchema,
+  getWikiSchema,
+  createWikiSchema,
+  listWikiPagesSchema,
+  getWikiPageSchema,
+  createWikiPageSchema,
+  updateWikiPageSchema
 } from '../schemas/index.js';
 
 async function handleCreateWorkItem(client: AzureDevOpsClient, args: any) {
@@ -360,6 +378,398 @@ async function handleUpdateBoard(client: AzureDevOpsClient, args: any) {
   }
 }
 
+async function handleListIterations(client: AzureDevOpsClient, args: any) {
+  try {
+    const { team } = args;
+    const iterations = await client.iterations.list(team);
+
+    if (iterations.length === 0) {
+      return {
+        content: [{ type: 'text', text: '📭 Nenhuma iteration encontrada!' }]
+      };
+    }
+
+    const text = `📅 **Iterations** (${iterations.length} sprints)\n\n${iterations.map((iter, i) => 
+      `${i + 1}. **${iter.name}** (${iter.attributes.timeFrame})\n   - ID: ${iter.id}\n   - Início: ${iter.attributes.startDate.split('T')[0]}\n   - Fim: ${iter.attributes.finishDate.split('T')[0]}\n   - Path: ${iter.path}`
+    ).join('\n\n')}`;
+
+    return {
+      content: [{ type: 'text', text }]
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      content: [{ type: 'text', text: `❌ Erro ao listar iterations: ${errorMessage}` }],
+      isError: true
+    };
+  }
+}
+
+async function handleCreateIteration(client: AzureDevOpsClient, args: any) {
+  try {
+    const { name, startDate, finishDate, path, team } = args;
+
+    const start = new Date(startDate);
+    const finish = new Date(finishDate);
+
+    if (finish <= start) {
+      return {
+        content: [{ type: 'text', text: '❌ Erro: finishDate deve ser posterior a startDate' }],
+        isError: true
+      };
+    }
+
+    const iteration = await client.iterations.create({
+      name,
+      startDate,
+      finishDate,
+      path
+    }, team);
+
+    const text = `✅ **Iteration Criada**\n\n📅 Nome: ${iteration.name}\n🆔 ID: ${iteration.id}\n📍 Path: ${iteration.path}\n⏰ Período: ${iteration.attributes.startDate.split('T')[0]} → ${iteration.attributes.finishDate.split('T')[0]}`;
+
+    return {
+      content: [{ type: 'text', text }]
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      content: [{ type: 'text', text: `❌ Erro ao criar iteration: ${errorMessage}\n\nNota: Create/Delete operations podem não ser suportadas via SDK. Use Azure DevOps portal ou HTTP provider.` }],
+      isError: true
+    };
+  }
+}
+
+async function handleGetCurrentIteration(client: AzureDevOpsClient) {
+  try {
+    const iterations = await client.iterations.list();
+    const current = iterations.find(iter => iter.attributes.timeFrame === 'current');
+
+    if (!current) {
+      return {
+        content: [{ type: 'text', text: '📭 Nenhuma iteration ativa no momento!' }]
+      };
+    }
+
+    const workItems = await client.iterations.getWorkItems(current.id);
+
+    const text = `📅 **Iteration Atual**\n\n**Nome**: ${current.name}\n**ID**: ${current.id}\n**Path**: ${current.path}\n**Período**: ${current.attributes.startDate.split('T')[0]} → ${current.attributes.finishDate.split('T')[0]}\n\n**Work Items** (${workItems.workItemRelations.length}):\n${workItems.workItemRelations.map((rel, i) => `${i + 1}. #${rel.target.id}`).join('\n')}`;
+
+    return {
+      content: [{ type: 'text', text }]
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      content: [{ type: 'text', text: `❌ Erro ao buscar iteration atual: ${errorMessage}` }],
+      isError: true
+    };
+  }
+}
+
+async function handleDeleteIteration(client: AzureDevOpsClient, args: any) {
+  try {
+    const { iterationId, team } = args;
+    await client.iterations.delete(iterationId, team);
+
+    return {
+      content: [{ type: 'text', text: `✅ Iteration ${iterationId} deletada com sucesso!\n\n⚠️ Esta ação remove a iteration do time. Work items não são deletados.` }]
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      content: [{ type: 'text', text: `❌ Erro ao deletar iteration: ${errorMessage}\n\nNota: Delete operation pode não ser suportada via SDK. Use Azure DevOps portal.` }],
+      isError: true
+    };
+  }
+}
+
+async function handleGetIterationCapacity(client: AzureDevOpsClient, args: any) {
+  try {
+    const { iterationId, team } = args;
+    const capacity = await client.iterations.getCapacity(iterationId, team);
+
+    if (capacity.length === 0) {
+      return {
+        content: [{ type: 'text', text: `📭 Nenhuma capacity definida para iteration ${iterationId}` }]
+      };
+    }
+
+    const text = `📊 **Capacity Planning**\n\n**Iteration**: ${iterationId}\n\n${capacity.map((cap, i) => 
+      `**Membro ${i + 1}**: ${cap.teamMemberDisplayName || cap.teamMemberId}\n${cap.activities.map(act => `   - ${act.name}: ${act.capacityPerDay}h/dia`).join('\n')}\n${cap.daysOff.length > 0 ? `   - Dias off: ${cap.daysOff.length}` : ''}`
+    ).join('\n\n')}`;
+
+    return {
+      content: [{ type: 'text', text }]
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      content: [{ type: 'text', text: `❌ Erro ao buscar capacity: ${errorMessage}\n\nNota: Capacity API pode não ser totalmente suportada via SDK. Use HTTP provider.` }],
+      isError: true
+    };
+  }
+}
+
+async function handleListPullRequests(client: AzureDevOpsClient, args: any) {
+  try {
+    const { repositoryId, status } = args;
+    const prs = await client.pullRequests.list(repositoryId, status);
+
+    if (prs.value.length === 0) {
+      return {
+        content: [{ type: 'text', text: '📭 Nenhum Pull Request encontrado!' }]
+      };
+    }
+
+    const text = `📋 **Pull Requests** (${prs.count})\n\n` + prs.value.map((pr, i) => 
+      `${i + 1}. **#${pr.pullRequestId}** - ${pr.title}\n   👤 ${pr.createdBy.displayName}\n   🔀 ${pr.sourceRefName} → ${pr.targetRefName}\n   📊 Status: ${pr.status}`
+    ).join('\n\n');
+
+    return {
+      content: [{ type: 'text', text }]
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      content: [{ type: 'text', text: `❌ Erro ao listar PRs: ${errorMessage}` }],
+      isError: true
+    };
+  }
+}
+
+async function handleCreatePullRequest(client: AzureDevOpsClient, args: any) {
+  try {
+    const { repositoryId, sourceRefName, targetRefName, title, description } = args;
+    const pr = await client.pullRequests.create(repositoryId, {
+      sourceRefName,
+      targetRefName,
+      title,
+      description
+    });
+
+    const text = `✅ **Pull Request Criado**\n\n🆔 ID: #${pr.pullRequestId}\n📝 Título: ${pr.title}\n🔀 ${pr.sourceRefName} → ${pr.targetRefName}\n👤 Criado por: ${pr.createdBy.displayName}\n📊 Status: ${pr.status}`;
+
+    return {
+      content: [{ type: 'text', text }]
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      content: [{ type: 'text', text: `❌ Erro ao criar PR: ${errorMessage}` }],
+      isError: true
+    };
+  }
+}
+
+async function handleListTeams(client: AzureDevOpsClient) {
+  try {
+    const result = await client.teams.list();
+
+    if (result.value.length === 0) {
+      return {
+        content: [{ type: 'text', text: '📭 Nenhum team encontrado!' }]
+      };
+    }
+
+    const text = `👥 **Teams** (${result.count})\n\n` + result.value.map((team, i) => 
+      `${i + 1}. **${team.name}**\n   🆔 ID: ${team.id}\n   📝 ${team.description || 'Sem descrição'}`
+    ).join('\n\n');
+
+    return {
+      content: [{ type: 'text', text }]
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      content: [{ type: 'text', text: `❌ Erro ao listar teams: ${errorMessage}` }],
+      isError: true
+    };
+  }
+}
+
+async function handleGetTeam(client: AzureDevOpsClient, args: any) {
+  try {
+    const { teamId } = args;
+    const team = await client.teams.get(teamId);
+
+    const members = await client.teams.listMembers(teamId);
+
+    const text = `👥 **Team Details**\n\n**Nome**: ${team.name}\n**ID**: ${team.id}\n**Descrição**: ${team.description || 'N/A'}\n\n**Membros** (${members.count}):\n${members.value.map((m, i) => `${i + 1}. ${m.identity.displayName}`).join('\n')}`;
+
+    return {
+      content: [{ type: 'text', text }]
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      content: [{ type: 'text', text: `❌ Erro ao buscar team: ${errorMessage}` }],
+      isError: true
+    };
+  }
+}
+
+async function handleCreateTeam(client: AzureDevOpsClient, args: any) {
+  try {
+    const { name, description } = args;
+    const team = await client.teams.create({ name, description });
+
+    const text = `✅ **Team Criado**\n\n👥 Nome: ${team.name}\n🆔 ID: ${team.id}\n📝 Descrição: ${team.description || 'N/A'}`;
+
+    return {
+      content: [{ type: 'text', text }]
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      content: [{ type: 'text', text: `❌ Erro ao criar team: ${errorMessage}` }],
+      isError: true
+    };
+  }
+}
+
+async function handleListRepositories(client: AzureDevOpsClient) {
+  try {
+    const result = await client.repositories.list();
+
+    if (result.value.length === 0) {
+      return {
+        content: [{ type: 'text', text: '📭 Nenhum repositório Git encontrado no projeto!' }]
+      };
+    }
+
+    const text = `📦 **Repositórios Git** (${result.count})\n\n` + result.value.map((repo, i) => 
+      `${i + 1}. **${repo.name}**\n   🆔 ID: ${repo.id}\n   🌿 Branch padrão: ${repo.defaultBranch || 'N/A'}\n   🔗 ${repo.remoteUrl || repo.url}`
+    ).join('\n\n');
+
+    return {
+      content: [{ type: 'text', text }]
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      content: [{ type: 'text', text: `❌ Erro ao listar repositórios: ${errorMessage}` }],
+      isError: true
+    };
+  }
+}
+
+async function handleGetRepository(client: AzureDevOpsClient, args: any) {
+  try {
+    const { repositoryId } = args;
+    const repo = await client.repositories.get(repositoryId);
+
+    const text = `📦 **Repositório Git**\n\n**Nome**: ${repo.name}\n**ID**: ${repo.id}\n**Projeto**: ${repo.project?.name || 'N/A'}\n**Branch Padrão**: ${repo.defaultBranch || 'N/A'}\n**URL**: ${repo.remoteUrl || repo.url}\n**SSH URL**: ${repo.sshUrl || 'N/A'}`;
+
+    return {
+      content: [{ type: 'text', text }]
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      content: [{ type: 'text', text: `❌ Erro ao buscar repositório: ${errorMessage}` }],
+      isError: true
+    };
+  }
+}
+
+async function handleListWikis(client: AzureDevOpsClient) {
+  try {
+    const result = await client.wiki.listWikis();
+    
+    if (result.count === 0) {
+      return { content: [{ type: 'text', text: '📭 Nenhuma wiki encontrada!' }] };
+    }
+
+    const text = `📚 **Wikis** (${result.count})\n\n` +
+      result.value.map((w, i) => `${i + 1}. **${w.name}**\n   🆔 ID: ${w.id}\n   📁 Tipo: ${w.type}\n   🔗 ${w.url}`).join('\n\n');
+
+    return { content: [{ type: 'text', text }] };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { content: [{ type: 'text', text: `❌ Erro ao listar wikis: ${errorMessage}` }], isError: true };
+  }
+}
+
+async function handleGetWiki(client: AzureDevOpsClient, args: any) {
+  try {
+    const { wikiIdentifier } = args;
+    const wiki = await client.wiki.getWiki(wikiIdentifier);
+
+    const text = `📚 **Wiki**\n\n**Nome**: ${wiki.name}\n**ID**: ${wiki.id}\n**Tipo**: ${wiki.type}\n**Projeto**: ${wiki.projectId}\n**Repositório**: ${wiki.repositoryId}\n**URL**: ${wiki.url}`;
+
+    return { content: [{ type: 'text', text }] };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { content: [{ type: 'text', text: `❌ Erro ao buscar wiki: ${errorMessage}` }], isError: true };
+  }
+}
+
+async function handleCreateWiki(client: AzureDevOpsClient, args: any) {
+  try {
+    const wiki = await client.wiki.createWiki(args);
+    return { content: [{ type: 'text', text: `✅ Wiki criada com sucesso!\n\n📚 ID: ${wiki.id}\n📝 Nome: ${wiki.name}\n🔗 ${wiki.url}` }] };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { content: [{ type: 'text', text: `❌ Erro ao criar wiki: ${errorMessage}` }], isError: true };
+  }
+}
+
+async function handleListWikiPages(client: AzureDevOpsClient, args: any) {
+  try {
+    const { wikiIdentifier, path } = args;
+    const result = await client.wiki.listPages(wikiIdentifier, path);
+    
+    if (result.count === 0) {
+      return { content: [{ type: 'text', text: '📭 Nenhuma página encontrada!' }] };
+    }
+
+    const text = `📄 **Páginas** (${result.count})\n\n` +
+      result.value.map((p, i) => `${i + 1}. **${p.path}**\n   🆔 ID: ${p.id}\n   📁 Order: ${p.order}`).join('\n\n');
+
+    return { content: [{ type: 'text', text }] };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { content: [{ type: 'text', text: `❌ Erro ao listar páginas: ${errorMessage}` }], isError: true };
+  }
+}
+
+async function handleGetWikiPage(client: AzureDevOpsClient, args: any) {
+  try {
+    const { wikiIdentifier, path, includeContent } = args;
+    const page = await client.wiki.getPage(wikiIdentifier, path, includeContent);
+
+    const text = `📄 **Página**\n\n**Path**: ${page.path}\n**ID**: ${page.id}\n**Git Path**: ${page.gitItemPath}\n\n${page.content ? `**Content**:\n\`\`\`markdown\n${page.content}\n\`\`\`` : ''}`;
+
+    return { content: [{ type: 'text', text }] };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { content: [{ type: 'text', text: `❌ Erro ao buscar página: ${errorMessage}` }], isError: true };
+  }
+}
+
+async function handleCreateWikiPage(client: AzureDevOpsClient, args: any) {
+  try {
+    const { wikiIdentifier, path, content } = args;
+    const page = await client.wiki.createPage(wikiIdentifier, path, { content });
+    return { content: [{ type: 'text', text: `✅ Página criada com sucesso!\n\n📄 Path: ${page.path}\n🆔 ID: ${page.id}` }] };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { content: [{ type: 'text', text: `❌ Erro ao criar página: ${errorMessage}` }], isError: true };
+  }
+}
+
+async function handleUpdateWikiPage(client: AzureDevOpsClient, args: any) {
+  try {
+    const { wikiIdentifier, path, content } = args;
+    const page = await client.wiki.updatePage(wikiIdentifier, path, { content });
+    return { content: [{ type: 'text', text: `✅ Página atualizada com sucesso!\n\n📄 Path: ${page.path}\n🆔 ID: ${page.id}` }] };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { content: [{ type: 'text', text: `❌ Erro ao atualizar página: ${errorMessage}` }], isError: true };
+  }
+}
+
 export function registerTools(server: Server, client: AzureDevOpsClient): void {
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
@@ -436,6 +846,105 @@ export function registerTools(server: Server, client: AzureDevOpsClient): void {
             },
             required: ['boardId', 'settings']
           }
+        },
+        {
+          name: 'azure_list_iterations',
+          description: 'Lista todas as iterations (sprints) do time',
+          inputSchema: listIterationsSchema
+        },
+        {
+          name: 'azure_create_iteration',
+          description: 'Cria uma nova iteration/sprint',
+          inputSchema: createIterationSchema
+        },
+        {
+          name: 'azure_get_current_iteration',
+          description: 'Obtém a iteration/sprint atual ativa com work items',
+          inputSchema: {
+            type: 'object',
+            properties: {},
+            required: []
+          }
+        },
+        {
+          name: 'azure_delete_iteration',
+          description: 'Deleta uma iteration (WARNING: use com cautela)',
+          inputSchema: deleteIterationSchema
+        },
+        {
+          name: 'azure_get_iteration_capacity',
+          description: 'Obtém capacity planning de uma iteration',
+          inputSchema: getIterationSchema
+        },
+        {
+          name: 'azure_list_pull_requests',
+          description: 'Lista Pull Requests de um repositório',
+          inputSchema: listPullRequestsSchema
+        },
+        {
+          name: 'azure_create_pull_request',
+          description: 'Cria um novo Pull Request',
+          inputSchema: createPullRequestSchema
+        },
+        {
+          name: 'azure_list_teams',
+          description: 'Lista todos os teams do projeto',
+          inputSchema: listTeamsSchema
+        },
+        {
+          name: 'azure_get_team',
+          description: 'Obtém detalhes de um team específico',
+          inputSchema: getTeamSchema
+        },
+        {
+          name: 'azure_create_team',
+          description: 'Cria um novo team no projeto',
+          inputSchema: createTeamSchema
+        },
+        {
+          name: 'azure_list_repositories',
+          description: 'Lista todos os repositórios Git do projeto',
+          inputSchema: listRepositoriesSchema
+        },
+        {
+          name: 'azure_get_repository',
+          description: 'Obtém detalhes de um repositório Git específico',
+          inputSchema: getRepositorySchema
+        },
+        {
+          name: 'azure_list_wikis',
+          description: 'Lista todas as wikis do projeto',
+          inputSchema: listWikisSchema
+        },
+        {
+          name: 'azure_get_wiki',
+          description: 'Obtém detalhes de uma wiki específica',
+          inputSchema: getWikiSchema
+        },
+        {
+          name: 'azure_create_wiki',
+          description: 'Cria uma nova wiki no projeto',
+          inputSchema: createWikiSchema
+        },
+        {
+          name: 'azure_list_wiki_pages',
+          description: 'Lista páginas de uma wiki',
+          inputSchema: listWikiPagesSchema
+        },
+        {
+          name: 'azure_get_wiki_page',
+          description: 'Obtém uma página específica da wiki',
+          inputSchema: getWikiPageSchema
+        },
+        {
+          name: 'azure_create_wiki_page',
+          description: 'Cria uma nova página na wiki',
+          inputSchema: createWikiPageSchema
+        },
+        {
+          name: 'azure_update_wiki_page',
+          description: 'Atualiza uma página existente na wiki',
+          inputSchema: updateWikiPageSchema
         }
       ]
     };
@@ -474,6 +983,63 @@ export function registerTools(server: Server, client: AzureDevOpsClient): void {
 
       case 'azure_update_board':
         return await handleUpdateBoard(client, args);
+
+      case 'azure_list_iterations':
+        return await handleListIterations(client, args);
+
+      case 'azure_create_iteration':
+        return await handleCreateIteration(client, args);
+
+      case 'azure_get_current_iteration':
+        return await handleGetCurrentIteration(client);
+
+      case 'azure_delete_iteration':
+        return await handleDeleteIteration(client, args);
+
+      case 'azure_get_iteration_capacity':
+        return await handleGetIterationCapacity(client, args);
+
+      case 'azure_list_pull_requests':
+        return await handleListPullRequests(client, args);
+
+      case 'azure_create_pull_request':
+        return await handleCreatePullRequest(client, args);
+
+      case 'azure_list_teams':
+        return await handleListTeams(client);
+
+      case 'azure_get_team':
+        return await handleGetTeam(client, args);
+
+      case 'azure_create_team':
+        return await handleCreateTeam(client, args);
+
+      case 'azure_list_repositories':
+        return await handleListRepositories(client);
+
+      case 'azure_get_repository':
+        return await handleGetRepository(client, args);
+
+      case 'azure_list_wikis':
+        return await handleListWikis(client);
+
+      case 'azure_get_wiki':
+        return await handleGetWiki(client, args);
+
+      case 'azure_create_wiki':
+        return await handleCreateWiki(client, args);
+
+      case 'azure_list_wiki_pages':
+        return await handleListWikiPages(client, args);
+
+      case 'azure_get_wiki_page':
+        return await handleGetWikiPage(client, args);
+
+      case 'azure_create_wiki_page':
+        return await handleCreateWikiPage(client, args);
+
+      case 'azure_update_wiki_page':
+        return await handleUpdateWikiPage(client, args);
 
       default:
         return {

@@ -116,6 +116,68 @@ async function getBoardConfigResource(client: AzureDevOpsClient, boardId: string
   };
 }
 
+async function getAllIterationsResource(client: AzureDevOpsClient) {
+  const iterations = await client.iterations.list();
+
+  return {
+    contents: [
+      {
+        uri: 'azure://iterations/all',
+        mimeType: 'application/json',
+        text: JSON.stringify(iterations, null, 2)
+      }
+    ]
+  };
+}
+
+async function getCurrentIterationResource(client: AzureDevOpsClient) {
+  const iterations = await client.iterations.list();
+  const currentIteration = iterations.find(iter => iter.attributes.timeFrame === 'current');
+
+  if (!currentIteration) {
+    return {
+      contents: [
+        {
+          uri: 'azure://iterations/current',
+          mimeType: 'application/json',
+          text: JSON.stringify({ message: 'No current iteration found' }, null, 2)
+        }
+      ]
+    };
+  }
+
+  const workItems = await client.iterations.getWorkItems(currentIteration.id);
+
+  const result = {
+    ...currentIteration,
+    workItems
+  };
+
+  return {
+    contents: [
+      {
+        uri: 'azure://iterations/current',
+        mimeType: 'application/json',
+        text: JSON.stringify(result, null, 2)
+      }
+    ]
+  };
+}
+
+async function getIterationCapacityResource(client: AzureDevOpsClient, iterationId: string) {
+  const capacity = await client.iterations.getCapacity(iterationId);
+
+  return {
+    contents: [
+      {
+        uri: `azure://iterations/${iterationId}/capacity`,
+        mimeType: 'application/json',
+        text: JSON.stringify(capacity, null, 2)
+      }
+    ]
+  };
+}
+
 export function registerResources(server: Server, client: AzureDevOpsClient): void {
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
     return {
@@ -155,6 +217,42 @@ export function registerResources(server: Server, client: AzureDevOpsClient): vo
           name: 'Configuração de Board',
           description: 'Configuração detalhada de um board específico (substitua {id} pelo ID do board)',
           mimeType: 'application/json'
+        },
+        {
+          uri: 'azure://iterations/all',
+          name: 'All Iterations',
+          description: 'Todas as iterations (sprints) do time - past, current, future',
+          mimeType: 'application/json'
+        },
+        {
+          uri: 'azure://iterations/current',
+          name: 'Current Iteration',
+          description: 'Sprint/iteration atual ativa com work items',
+          mimeType: 'application/json'
+        },
+        {
+          uri: 'azure://iterations/{id}/capacity',
+          name: 'Iteration Capacity',
+          description: 'Capacity planning de uma iteration específica (substitua {id} pelo ID da iteration)',
+          mimeType: 'application/json'
+        },
+        {
+          uri: 'azure://pullrequests/active',
+          name: 'Active Pull Requests',
+          description: 'Pull Requests ativos (backend implementado, handler pendente)',
+          mimeType: 'application/json'
+        },
+        {
+          uri: 'azure://teams/list',
+          name: 'Teams do Projeto',
+          description: 'Lista de todos os teams (backend implementado, handler pendente)',
+          mimeType: 'application/json'
+        },
+        {
+          uri: 'azure://wikis/list',
+          name: 'Wikis do Projeto',
+          description: 'Lista de todas as wikis disponíveis',
+          mimeType: 'application/json'
         }
       ]
     };
@@ -180,10 +278,30 @@ export function registerResources(server: Server, client: AzureDevOpsClient): vo
         case 'azure://boards/list':
           return await getBoardsListResource(client);
 
+        case 'azure://iterations/all':
+          return await getAllIterationsResource(client);
+
+        case 'azure://iterations/current':
+          return await getCurrentIterationResource(client);
+
+        case 'azure://wikis/list':
+          const wikis = await client.wiki.listWikis();
+          return {
+            contents: [{
+              uri: 'azure://wikis/list',
+              mimeType: 'application/json',
+              text: JSON.stringify(wikis, null, 2)
+            }]
+          };
+
         default:
           if (uri.match(/^azure:\/\/boards\/([^\/]+)\/config$/)) {
             const boardId = uri.split('/')[3];
             return await getBoardConfigResource(client, boardId);
+          }
+          if (uri.match(/^azure:\/\/iterations\/([^\/]+)\/capacity$/)) {
+            const iterationId = uri.split('/')[3];
+            return await getIterationCapacityResource(client, iterationId);
           }
           throw new Error(`Unknown resource URI: ${uri}`);
       }

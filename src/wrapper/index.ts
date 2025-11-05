@@ -8,6 +8,11 @@ import { TelemetryCollector } from './logging/telemetry';
 import { WorkItemsAPI } from './api/work-items';
 import { WiqlAPI } from './api/wiql';
 import { BoardsAPI } from './api/boards';
+import { IterationsAPI } from './api/iterations';
+import { PullRequestsAPI } from './api/pull-requests';
+import { RepositoriesAPI } from './api/repositories';
+import { TeamsAPI } from './api/teams';
+import { WikiAPI } from './api/wiki';
 
 export interface AzureDevOpsClientOptions {
   config?: Partial<AzureDevOpsConfig>;
@@ -21,12 +26,19 @@ export class AzureDevOpsClient {
   public workItems: WorkItemsAPI;
   public wiql: WiqlAPI;
   public boards: BoardsAPI;
+  public iterations: IterationsAPI;
+  public pullRequests: PullRequestsAPI;
+  public repositories: RepositoriesAPI;
+  public teams: TeamsAPI;
+  public wiki: WikiAPI;
   public telemetry: TelemetryCollector;
   
   private provider?: ReturnType<typeof createProvider> extends Promise<infer T> ? T : never;
+  private httpProvider?: ReturnType<typeof createProvider> extends Promise<infer T> ? T : never;
   private retryPolicy: RetryPolicy;
   private circuitBreaker: CircuitBreaker;
   private rateLimiter: RateLimiter;
+  private finalConfig?: AzureDevOpsConfig;
 
   constructor(options: AzureDevOpsClientOptions = {}) {
     this.retryPolicy = new RetryPolicy(options.maxRetries || 3);
@@ -37,19 +49,32 @@ export class AzureDevOpsClient {
     this.workItems = {} as WorkItemsAPI;
     this.wiql = {} as WiqlAPI;
     this.boards = {} as BoardsAPI;
+    this.iterations = {} as IterationsAPI;
+    this.pullRequests = {} as PullRequestsAPI;
+    this.repositories = {} as RepositoriesAPI;
+    this.teams = {} as TeamsAPI;
+    this.wiki = {} as WikiAPI;
+  }
+
+  private async ensureHttpProvider(): Promise<any> {
+    if (!this.httpProvider && this.finalConfig) {
+      logger.info('Initializing HTTP Provider for fallback operations');
+      this.httpProvider = await createProvider(this.finalConfig, 'http');
+    }
+    return this.httpProvider;
   }
 
   async initialize(options: AzureDevOpsClientOptions = {}): Promise<void> {
     logger.info('Initializing Azure DevOps Client');
 
-    const finalConfig = {
+    this.finalConfig = {
       ...defaultConfig,
       ...options.config
     };
 
     try {
       this.provider = await createProvider(
-        finalConfig,
+        this.finalConfig,
         options.providerType || 'sdk'
       );
 
@@ -78,6 +103,49 @@ export class AzureDevOpsClient {
         this.circuitBreaker,
         this.rateLimiter,
         this.telemetry
+      );
+
+      this.iterations = new IterationsAPI(
+        this.provider,
+        this.retryPolicy,
+        this.circuitBreaker,
+        this.rateLimiter,
+        this.telemetry,
+        () => this.ensureHttpProvider()
+      );
+
+      this.pullRequests = new PullRequestsAPI(
+        this.provider,
+        this.retryPolicy,
+        this.circuitBreaker,
+        this.rateLimiter,
+        this.telemetry,
+        () => this.ensureHttpProvider()
+      );
+
+      this.repositories = new RepositoriesAPI(
+        this.provider,
+        this.retryPolicy,
+        this.circuitBreaker,
+        this.rateLimiter,
+        this.telemetry
+      );
+
+      this.teams = new TeamsAPI(
+        this.provider,
+        this.retryPolicy,
+        this.circuitBreaker,
+        this.rateLimiter,
+        this.telemetry
+      );
+
+      this.wiki = new WikiAPI(
+        this.provider,
+        this.retryPolicy,
+        this.circuitBreaker,
+        this.rateLimiter,
+        this.telemetry,
+        () => this.ensureHttpProvider()
       );
 
       this.wiql.setWorkItemsAPI(this.workItems);

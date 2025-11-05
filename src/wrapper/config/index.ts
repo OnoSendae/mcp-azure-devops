@@ -4,6 +4,7 @@ export interface AzureDevOpsConfig {
   pat: string;
   organization: string;
   project: string;
+  team?: string;
   apiVersion: string;
   logLevel: string;
   enableTelemetry: boolean;
@@ -15,6 +16,7 @@ const createConfig = (): AzureDevOpsConfig => {
     pat: getEnvVar('AZURE_DEVOPS_PAT'),
     organization: getEnvVar('AZURE_DEVOPS_ORG'),
     project: getEnvVar('AZURE_DEVOPS_PROJECT'),
+    team: getOptionalEnvVar('AZURE_DEVOPS_TEAM', ''),
     apiVersion: getOptionalEnvVar('AZURE_DEVOPS_API_VERSION', '7.1'),
     logLevel: getOptionalEnvVar('LOG_LEVEL', 'info'),
     enableTelemetry: getBooleanEnvVar('ENABLE_TELEMETRY', true),

@@ -11,7 +11,7 @@ Guia rápido para configurar e usar o servidor MCP.
 ## 2. Instalação
 
 ```bash
-cd /Users/cleberdasilvahensel/Desktop/source/ono-sendae/vibe-driven-development-kit/my_vibe/vibes/prototipos/mcp-azure-devops
+cd /caminho/para/mcp-azure-devops
 npm install
 ```
 
@@ -41,7 +41,7 @@ Edite `~/.cursor/mcp.json` (criar se não existir):
     "azure-devops": {
       "command": "node",
       "args": [
-        "/Users/cleberdasilvahensel/Desktop/source/ono-sendae/vibe-driven-development-kit/my_vibe/vibes/prototipos/mcp-azure-devops/dist/index.js"
+        "/caminho/completo/para/mcp-azure-devops/dist/index.js"
       ],
       "env": {
         "AZURE_DEVOPS_PAT": "seu_pat_aqui",
@@ -83,7 +83,7 @@ Se funcionou, você verá a lista de suas tasks!
 ### Atualizar work items
 
 - "Marque a task #456 como Done"
-- "Atribua o bug #789 para joão@email.com"
+- "Atribua o bug #789 para usuario@exemplo.com"
 
 ### Query WIQL
 
