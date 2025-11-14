@@ -47,6 +47,15 @@ export const createWorkItemSchema = {
     state: {
       type: 'string',
       description: 'Estado inicial (ex: To Do, New, etc - depende do template)'
+    },
+    parentId: {
+      type: 'number',
+      description: 'ID do work item pai (para criar relação Parent-Child)'
+    },
+    relatedWorkItemIds: {
+      type: 'array',
+      items: { type: 'number' },
+      description: 'IDs dos work items relacionados (para criar relações Related)'
     }
   },
   required: ['type', 'title']
@@ -92,6 +101,15 @@ export const updateWorkItemSchema = {
     storyPoints: {
       type: 'number',
       minimum: 0
+    },
+    parentId: {
+      type: 'number',
+      description: 'ID do work item pai (para criar relação Parent-Child)'
+    },
+    relatedWorkItemIds: {
+      type: 'array',
+      items: { type: 'number' },
+      description: 'IDs dos work items relacionados (para criar relações Related)'
     }
   },
   required: ['id']

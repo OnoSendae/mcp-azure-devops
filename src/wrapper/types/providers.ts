@@ -1,4 +1,4 @@
-import { WorkItem, CreateWorkItemPayload, UpdateWorkItemPayload } from './work-items';
+import { WorkItem, CreateWorkItemPayload, UpdateWorkItemPayload, AddWorkItemRelationPayload } from './work-items';
 import { WiqlQuery, WiqlResult } from './wiql';
 import { Board, BoardsListResult, BoardSettings } from './boards';
 import { TeamIteration, IterationCapacity, IterationWorkItems, CreateIterationPayload } from './iterations';
@@ -23,6 +23,7 @@ export interface IProvider {
   updateWorkItem(id: number, payload: UpdateWorkItemPayload, useMarkdown?: boolean): Promise<WorkItem>;
   deleteWorkItem(id: number): Promise<void>;
   getWorkItems(ids: number[], fields?: string[]): Promise<WorkItem[]>;
+  addWorkItemRelation(payload: AddWorkItemRelationPayload): Promise<WorkItem>;
   executeWiql(query: WiqlQuery): Promise<WiqlResult>;
   listBoards(): Promise<BoardsListResult>;
   getBoard(boardId: string): Promise<Board>;
