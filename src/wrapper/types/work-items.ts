@@ -31,7 +31,7 @@ export interface WorkItem {
   url: string;
 }
 
-export type JsonPatchOperation = 
+export type JsonPatchOperation =
   | { op: 'add'; path: string; value: unknown }
   | { op: 'replace'; path: string; value: unknown }
   | { op: 'remove'; path: string }
@@ -46,5 +46,14 @@ export interface CreateWorkItemPayload {
 
 export interface UpdateWorkItemPayload {
   operations: JsonPatchOperation[];
+}
+
+export type WorkItemRelationType = 'parent' | 'related' | 'predecessor' | 'successor';
+
+export interface AddWorkItemRelationPayload {
+  workItemId: number;
+  targetWorkItemId: number;
+  relationType: WorkItemRelationType;
+  comment?: string;
 }
 

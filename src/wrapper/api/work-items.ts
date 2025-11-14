@@ -1,4 +1,4 @@
-import { IProvider, WorkItem, CreateWorkItemPayload, UpdateWorkItemPayload, WorkItemType, WorkItemFields } from '../types';
+import { IProvider, WorkItem, CreateWorkItemPayload, UpdateWorkItemPayload, AddWorkItemRelationPayload, WorkItemType, WorkItemFields } from '../types';
 import { RetryPolicy, CircuitBreaker } from '../core/resilience';
 import { RateLimiter, ValidationRules } from '../core/rules';
 import { logRequest, logResponse, logError } from '../logging/logger';
@@ -44,7 +44,7 @@ export class WorkItemsAPI {
 
       const duration = Date.now() - startTime;
       logResponse('createWorkItem', type, duration);
-      
+
       this.telemetry.recordRequest({
         method: 'createWorkItem',
         success: true,
@@ -74,7 +74,7 @@ export class WorkItemsAPI {
 
       const duration = Date.now() - startTime;
       logResponse('getWorkItem', `${id}`, duration);
-      
+
       this.telemetry.recordRequest({
         method: 'getWorkItem',
         success: true,
@@ -110,7 +110,7 @@ export class WorkItemsAPI {
 
       const duration = Date.now() - startTime;
       logResponse('updateWorkItem', `${id}`, duration);
-      
+
       this.telemetry.recordRequest({
         method: 'updateWorkItem',
         success: true,
@@ -140,7 +140,7 @@ export class WorkItemsAPI {
 
       const duration = Date.now() - startTime;
       logResponse('deleteWorkItem', `${id}`, duration);
-      
+
       this.telemetry.recordRequest({
         method: 'deleteWorkItem',
         success: true,
@@ -162,7 +162,7 @@ export class WorkItemsAPI {
 
     const batchSize = 200;
     const batches: number[][] = [];
-    
+
     for (let i = 0; i < ids.length; i += batchSize) {
       batches.push(ids.slice(i, i + batchSize));
     }
@@ -182,7 +182,7 @@ export class WorkItemsAPI {
 
         const duration = Date.now() - startTime;
         logResponse('getWorkItems', 'batch', duration);
-        
+
         this.telemetry.recordRequest({
           method: 'getWorkItems',
           success: true,
@@ -206,6 +206,39 @@ export class WorkItemsAPI {
     return this.circuitBreaker.execute(
       () => this.retryPolicy.execute(fn)
     );
+  }
+
+  async addRelation(payload: AddWorkItemRelationPayload): Promise<WorkItem> {
+    await this.rateLimiter.acquire();
+    const startTime = Date.now();
+
+    logRequest('addWorkItemRelation', `${payload.workItemId}`, {
+      targetId: payload.targetWorkItemId,
+      relationType: payload.relationType
+    });
+
+    try {
+      const result = await this.executeWithResilience(
+        () => this.provider.addWorkItemRelation(payload)
+      );
+
+      const duration = Date.now() - startTime;
+      logResponse('addWorkItemRelation', `${payload.workItemId}`, duration);
+
+      this.telemetry.recordRequest({
+        method: 'addWorkItemRelation',
+        success: true,
+        duration,
+        provider: this.getProviderType()
+      });
+
+      return result;
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error('Unknown error');
+      logError(err, { method: 'addWorkItemRelation', workItemId: payload.workItemId });
+      this.telemetry.recordError(err, { method: 'addWorkItemRelation' });
+      throw err;
+    }
   }
 
   private getProviderType(): string {

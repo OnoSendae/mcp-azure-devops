@@ -34,7 +34,7 @@ import {
 
 async function handleCreateWorkItem(client: AzureDevOpsClient, args: any) {
   try {
-    const { type, title, description, acceptanceCriteria, reproSteps, assignedTo, priority, storyPoints, tags, state } = args;
+    const { type, title, description, acceptanceCriteria, reproSteps, assignedTo, priority, storyPoints, tags, state, parentId, relatedWorkItemIds } = args;
 
     const fields: any = {
       'System.Title': title
@@ -51,11 +51,64 @@ async function handleCreateWorkItem(client: AzureDevOpsClient, args: any) {
 
     const workItem = await client.workItems.create(type, fields);
 
+    const relationsCreated: string[] = [];
+
+    if (parentId) {
+      try {
+        await client.workItems.addRelation({
+          workItemId: workItem.id,
+          targetWorkItemId: parentId,
+          relationType: 'parent'
+        });
+        relationsCreated.push(`Parent: #${parentId}`);
+      } catch (relError) {
+        const relErrorMessage = relError instanceof Error ? relError.message : 'Unknown error';
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `⚠️ Work item criado (#${workItem.id}), mas falha ao criar relação Parent:\n${relErrorMessage}`
+            }
+          ],
+          isError: true
+        };
+      }
+    }
+
+    if (relatedWorkItemIds && Array.isArray(relatedWorkItemIds) && relatedWorkItemIds.length > 0) {
+      for (const relatedId of relatedWorkItemIds) {
+        try {
+          await client.workItems.addRelation({
+            workItemId: workItem.id,
+            targetWorkItemId: relatedId,
+            relationType: 'related'
+          });
+          relationsCreated.push(`Related: #${relatedId}`);
+        } catch (relError) {
+          const relErrorMessage = relError instanceof Error ? relError.message : 'Unknown error';
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `⚠️ Work item criado (#${workItem.id}), mas falha ao criar relação Related com #${relatedId}:\n${relErrorMessage}`
+              }
+            ],
+            isError: true
+          };
+        }
+      }
+    }
+
+    let relationsText = '';
+    if (relationsCreated.length > 0) {
+      relationsText = `\n🔗 Relações criadas:\n${relationsCreated.map(r => `  - ${r}`).join('\n')}`;
+    }
+
     return {
       content: [
         {
           type: 'text',
-          text: `✅ Work item criado com sucesso!\n\n📋 ID: ${workItem.id}\n📝 Tipo: ${type}\n🔗 Título: ${title}\n⏰ Estado: ${workItem.fields['System.State'] || 'N/A'}`
+          text: `✅ Work item criado com sucesso!\n\n📋 ID: ${workItem.id}\n📝 Tipo: ${type}\n🔗 Título: ${title}\n⏰ Estado: ${workItem.fields['System.State'] || 'N/A'}${relationsText}`
         }
       ]
     };
@@ -75,7 +128,7 @@ async function handleCreateWorkItem(client: AzureDevOpsClient, args: any) {
 
 async function handleUpdateWorkItem(client: AzureDevOpsClient, args: any) {
   try {
-    const { id, state, assignedTo, description, acceptanceCriteria, reproSteps, title, priority, storyPoints } = args;
+    const { id, state, assignedTo, description, acceptanceCriteria, reproSteps, title, priority, storyPoints, parentId, relatedWorkItemIds } = args;
 
     const operations: any[] = [];
 
@@ -90,11 +143,64 @@ async function handleUpdateWorkItem(client: AzureDevOpsClient, args: any) {
 
     const workItem = await client.workItems.update(id, operations);
 
+    const relationsCreated: string[] = [];
+
+    if (parentId) {
+      try {
+        await client.workItems.addRelation({
+          workItemId: id,
+          targetWorkItemId: parentId,
+          relationType: 'parent'
+        });
+        relationsCreated.push(`Parent: #${parentId}`);
+      } catch (relError) {
+        const relErrorMessage = relError instanceof Error ? relError.message : 'Unknown error';
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `⚠️ Work item #${id} atualizado, mas falha ao criar relação Parent:\n${relErrorMessage}`
+            }
+          ],
+          isError: true
+        };
+      }
+    }
+
+    if (relatedWorkItemIds && Array.isArray(relatedWorkItemIds) && relatedWorkItemIds.length > 0) {
+      for (const relatedId of relatedWorkItemIds) {
+        try {
+          await client.workItems.addRelation({
+            workItemId: id,
+            targetWorkItemId: relatedId,
+            relationType: 'related'
+          });
+          relationsCreated.push(`Related: #${relatedId}`);
+        } catch (relError) {
+          const relErrorMessage = relError instanceof Error ? relError.message : 'Unknown error';
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `⚠️ Work item #${id} atualizado, mas falha ao criar relação Related com #${relatedId}:\n${relErrorMessage}`
+              }
+            ],
+            isError: true
+          };
+        }
+      }
+    }
+
+    let relationsText = '';
+    if (relationsCreated.length > 0) {
+      relationsText = `\n🔗 Relações criadas:\n${relationsCreated.map(r => `  - ${r}`).join('\n')}`;
+    }
+
     return {
       content: [
         {
           type: 'text',
-          text: `✅ Work item #${id} atualizado com sucesso!\n\n📝 Título: ${workItem.fields['System.Title']}\n⏰ Estado: ${workItem.fields['System.State']}`
+          text: `✅ Work item #${id} atualizado com sucesso!\n\n📝 Título: ${workItem.fields['System.Title']}\n⏰ Estado: ${workItem.fields['System.State']}${relationsText}`
         }
       ]
     };
@@ -324,7 +430,7 @@ async function handleListBoards(client: AzureDevOpsClient) {
   try {
     const boards = await client.boards.list();
 
-    const text = `📋 **Boards do Projeto** (${boards.count} boards)\n\n${boards.value.map((b, i) => 
+    const text = `📋 **Boards do Projeto** (${boards.count} boards)\n\n${boards.value.map((b, i) =>
       `${i + 1}. **${b.name}**\n   - ID: ${b.id}\n   - Colunas: ${b.columns.length}\n   - URL: ${b.url}`
     ).join('\n\n')}`;
 
@@ -389,7 +495,7 @@ async function handleListIterations(client: AzureDevOpsClient, args: any) {
       };
     }
 
-    const text = `📅 **Iterations** (${iterations.length} sprints)\n\n${iterations.map((iter, i) => 
+    const text = `📅 **Iterations** (${iterations.length} sprints)\n\n${iterations.map((iter, i) =>
       `${i + 1}. **${iter.name}** (${iter.attributes.timeFrame})\n   - ID: ${iter.id}\n   - Início: ${iter.attributes.startDate.split('T')[0]}\n   - Fim: ${iter.attributes.finishDate.split('T')[0]}\n   - Path: ${iter.path}`
     ).join('\n\n')}`;
 
@@ -495,7 +601,7 @@ async function handleGetIterationCapacity(client: AzureDevOpsClient, args: any) 
       };
     }
 
-    const text = `📊 **Capacity Planning**\n\n**Iteration**: ${iterationId}\n\n${capacity.map((cap, i) => 
+    const text = `📊 **Capacity Planning**\n\n**Iteration**: ${iterationId}\n\n${capacity.map((cap, i) =>
       `**Membro ${i + 1}**: ${cap.teamMemberDisplayName || cap.teamMemberId}\n${cap.activities.map(act => `   - ${act.name}: ${act.capacityPerDay}h/dia`).join('\n')}\n${cap.daysOff.length > 0 ? `   - Dias off: ${cap.daysOff.length}` : ''}`
     ).join('\n\n')}`;
 
@@ -522,7 +628,7 @@ async function handleListPullRequests(client: AzureDevOpsClient, args: any) {
       };
     }
 
-    const text = `📋 **Pull Requests** (${prs.count})\n\n` + prs.value.map((pr, i) => 
+    const text = `📋 **Pull Requests** (${prs.count})\n\n` + prs.value.map((pr, i) =>
       `${i + 1}. **#${pr.pullRequestId}** - ${pr.title}\n   👤 ${pr.createdBy.displayName}\n   🔀 ${pr.sourceRefName} → ${pr.targetRefName}\n   📊 Status: ${pr.status}`
     ).join('\n\n');
 
@@ -572,7 +678,7 @@ async function handleListTeams(client: AzureDevOpsClient) {
       };
     }
 
-    const text = `👥 **Teams** (${result.count})\n\n` + result.value.map((team, i) => 
+    const text = `👥 **Teams** (${result.count})\n\n` + result.value.map((team, i) =>
       `${i + 1}. **${team.name}**\n   🆔 ID: ${team.id}\n   📝 ${team.description || 'Sem descrição'}`
     ).join('\n\n');
 
@@ -638,7 +744,7 @@ async function handleListRepositories(client: AzureDevOpsClient) {
       };
     }
 
-    const text = `📦 **Repositórios Git** (${result.count})\n\n` + result.value.map((repo, i) => 
+    const text = `📦 **Repositórios Git** (${result.count})\n\n` + result.value.map((repo, i) =>
       `${i + 1}. **${repo.name}**\n   🆔 ID: ${repo.id}\n   🌿 Branch padrão: ${repo.defaultBranch || 'N/A'}\n   🔗 ${repo.remoteUrl || repo.url}`
     ).join('\n\n');
 
@@ -676,7 +782,7 @@ async function handleGetRepository(client: AzureDevOpsClient, args: any) {
 async function handleListWikis(client: AzureDevOpsClient) {
   try {
     const result = await client.wiki.listWikis();
-    
+
     if (result.count === 0) {
       return { content: [{ type: 'text', text: '📭 Nenhuma wiki encontrada!' }] };
     }
@@ -719,7 +825,7 @@ async function handleListWikiPages(client: AzureDevOpsClient, args: any) {
   try {
     const { wikiIdentifier, path } = args;
     const result = await client.wiki.listPages(wikiIdentifier, path);
-    
+
     if (result.count === 0) {
       return { content: [{ type: 'text', text: '📭 Nenhuma página encontrada!' }] };
     }

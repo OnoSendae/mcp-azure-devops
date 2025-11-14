@@ -3,7 +3,7 @@ import { IWorkItemTrackingApi } from 'azure-devops-node-api/WorkItemTrackingApi'
 import { JsonPatchOperation as SdkJsonPatchOperation } from 'azure-devops-node-api/interfaces/common/VSSInterfaces';
 import { Wiql } from 'azure-devops-node-api/interfaces/WorkItemTrackingInterfaces';
 import { BaseProvider } from './base.provider';
-import { WorkItem, CreateWorkItemPayload, UpdateWorkItemPayload, WorkItemFields, WiqlQuery, WiqlResult, Board, BoardsListResult, BoardSettings, TeamIteration, IterationCapacity, IterationWorkItems, CreateIterationPayload, PullRequest, PullRequestListResult, CreatePullRequestPayload, UpdatePullRequestPayload, MergePullRequestPayload, AddCommentPayload, AddReviewerPayload, PullRequestVotePayload, PullRequestThread, GitRepository, RepositoriesListResult, Team, TeamsListResult, TeamMember, TeamMembersResult, CreateTeamPayload, UpdateTeamPayload, AddTeamMemberPayload } from '../types';
+import { WorkItem, CreateWorkItemPayload, UpdateWorkItemPayload, AddWorkItemRelationPayload, WorkItemRelationType, WorkItemFields, WiqlQuery, WiqlResult, Board, BoardsListResult, BoardSettings, TeamIteration, IterationCapacity, IterationWorkItems, CreateIterationPayload, PullRequest, PullRequestListResult, CreatePullRequestPayload, UpdatePullRequestPayload, MergePullRequestPayload, AddCommentPayload, AddReviewerPayload, PullRequestVotePayload, PullRequestThread, GitRepository, RepositoriesListResult, Team, TeamsListResult, TeamMember, TeamMembersResult, CreateTeamPayload, UpdateTeamPayload, AddTeamMemberPayload } from '../types';
 
 export class SdkProvider extends BaseProvider {
   private connection?: azdev.WebApi;
@@ -13,10 +13,10 @@ export class SdkProvider extends BaseProvider {
     try {
       const orgUrl = `${this.config.baseUrl}/${this.config.organization}`;
       const authHandler = azdev.getPersonalAccessTokenHandler(this.config.pat);
-      
+
       this.connection = new azdev.WebApi(orgUrl, authHandler);
       this.witApi = await this.connection.getWorkItemTrackingApi();
-      
+
       this.updateHealth(true);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -107,7 +107,7 @@ export class SdkProvider extends BaseProvider {
       ];
 
       for (const field of multilineFields) {
-        const hasFieldUpdate = payload.operations.some(op => 
+        const hasFieldUpdate = payload.operations.some(op =>
           op.path === `/fields/${field}` && op.op === 'add'
         );
         if (hasFieldUpdate) {
@@ -154,6 +154,44 @@ export class SdkProvider extends BaseProvider {
     return results.map(item => this.convertToWorkItem(item));
   }
 
+  async addWorkItemRelation(payload: AddWorkItemRelationPayload): Promise<WorkItem> {
+    if (!this.witApi) {
+      throw new Error('Provider not initialized');
+    }
+
+    const relationTypeMap: Record<WorkItemRelationType, string> = {
+      parent: 'System.LinkTypes.Hierarchy-Reverse',
+      related: 'System.LinkTypes.Related',
+      predecessor: 'System.LinkTypes.Dependency-Reverse',
+      successor: 'System.LinkTypes.Dependency-Forward'
+    };
+
+    const relationType = relationTypeMap[payload.relationType];
+    const targetUrl = `${this.config.baseUrl}/${this.config.organization}/${this.config.project}/_apis/wit/workitems/${payload.targetWorkItemId}`;
+
+    const operation: SdkJsonPatchOperation = {
+      op: 'add',
+      path: '/relations/-',
+      value: {
+        rel: relationType,
+        url: targetUrl,
+        ...(payload.comment && { attributes: { comment: payload.comment } })
+      }
+    } as unknown as SdkJsonPatchOperation;
+
+    const result = await this.witApi.updateWorkItem(
+      null,
+      [operation],
+      payload.workItemId
+    );
+
+    if (!result) {
+      throw new Error(`Failed to add relation to work item ${payload.workItemId}`);
+    }
+
+    return this.convertToWorkItem(result);
+  }
+
   async executeWiql(query: WiqlQuery): Promise<WiqlResult> {
     if (!this.witApi) {
       throw new Error('Provider not initialized');
@@ -179,8 +217,8 @@ export class SdkProvider extends BaseProvider {
       'oneHop': 'oneHop'
     };
 
-    const queryType = result.queryType ? 
-      queryTypeMap[result.queryType.toString()] || 'flat' : 
+    const queryType = result.queryType ?
+      queryTypeMap[result.queryType.toString()] || 'flat' :
       'flat';
 
     return {
@@ -205,7 +243,7 @@ export class SdkProvider extends BaseProvider {
     }
 
     const item = sdkWorkItem as { id?: number; rev?: number; fields?: Record<string, unknown>; url?: string; _links?: { html?: { href?: string } } };
-    
+
     if (!item.id) {
       throw new Error('Work item missing required field: id');
     }
@@ -225,9 +263,9 @@ export class SdkProvider extends BaseProvider {
 
     const workApi = await this.connection.getWorkApi();
     const teamContext = { project: this.config.project };
-    
+
     const boards = await workApi.getBoards(teamContext);
-    
+
     if (!boards) {
       return { value: [], count: 0 };
     }
@@ -254,9 +292,9 @@ export class SdkProvider extends BaseProvider {
 
     const workApi = await this.connection.getWorkApi();
     const teamContext = { project: this.config.project };
-    
+
     const board = await workApi.getBoard(teamContext, boardId);
-    
+
     if (!board) {
       throw new Error(`Board ${boardId} not found`);
     }
@@ -287,13 +325,13 @@ export class SdkProvider extends BaseProvider {
     }
 
     const workApi = await this.connection.getWorkApi();
-    const teamContext = { 
+    const teamContext = {
       project: this.config.project,
       team: team || this.config.team || this.config.project
     };
-    
+
     const iterations = await workApi.getTeamIterations(teamContext);
-    
+
     if (!iterations) {
       return [];
     }
@@ -318,13 +356,13 @@ export class SdkProvider extends BaseProvider {
     }
 
     const workApi = await this.connection.getWorkApi();
-    const teamContext = { 
+    const teamContext = {
       project: this.config.project,
       team: team || this.config.team || this.config.project
     };
-    
+
     const iteration = await workApi.getTeamIteration(teamContext, iterationId);
-    
+
     if (!iteration) {
       throw new Error(`Iteration ${iterationId} not found`);
     }
@@ -361,13 +399,13 @@ export class SdkProvider extends BaseProvider {
     }
 
     const workApi = await this.connection.getWorkApi();
-    const teamContext = { 
+    const teamContext = {
       project: this.config.project,
       team: team || this.config.team || this.config.project
     };
-    
+
     const workItems = await workApi.getIterationWorkItems(teamContext, iterationId);
-    
+
     if (!workItems || !workItems.workItemRelations) {
       return {
         workItemRelations: [],

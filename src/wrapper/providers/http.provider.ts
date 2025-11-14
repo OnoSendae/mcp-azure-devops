@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { BaseProvider } from './base.provider';
-import { WorkItem, CreateWorkItemPayload, UpdateWorkItemPayload, WiqlQuery, WiqlResult, Board, BoardsListResult, BoardSettings, TeamIteration, IterationCapacity, IterationWorkItems, CreateIterationPayload, PullRequest, PullRequestListResult, CreatePullRequestPayload, UpdatePullRequestPayload, MergePullRequestPayload, AddCommentPayload, AddReviewerPayload, PullRequestVotePayload, PullRequestThread, GitRepository, RepositoriesListResult, Team, TeamsListResult, TeamMember, TeamMembersResult, CreateTeamPayload, UpdateTeamPayload, AddTeamMemberPayload, Wiki, WikisListResult, WikiPage, WikiPagesListResult, CreateWikiPayload, CreateWikiPagePayload, UpdateWikiPagePayload } from '../types';
+import { WorkItem, CreateWorkItemPayload, UpdateWorkItemPayload, AddWorkItemRelationPayload, WorkItemRelationType, WiqlQuery, WiqlResult, Board, BoardsListResult, BoardSettings, TeamIteration, IterationCapacity, IterationWorkItems, CreateIterationPayload, PullRequest, PullRequestListResult, CreatePullRequestPayload, UpdatePullRequestPayload, MergePullRequestPayload, AddCommentPayload, AddReviewerPayload, PullRequestVotePayload, PullRequestThread, GitRepository, RepositoriesListResult, Team, TeamsListResult, TeamMember, TeamMembersResult, CreateTeamPayload, UpdateTeamPayload, AddTeamMemberPayload, Wiki, WikisListResult, WikiPage, WikiPagesListResult, CreateWikiPayload, CreateWikiPagePayload, UpdateWikiPagePayload } from '../types';
 
 export class HttpProvider extends BaseProvider {
   private client?: AxiosInstance;
@@ -113,7 +113,7 @@ export class HttpProvider extends BaseProvider {
       ];
 
       for (const field of multilineFields) {
-        const hasFieldUpdate = operations.some(op => 
+        const hasFieldUpdate = operations.some(op =>
           op.path === `/fields/${field}` && op.op === 'add'
         );
         if (hasFieldUpdate) {
@@ -155,13 +155,51 @@ export class HttpProvider extends BaseProvider {
     const params: Record<string, unknown> = {
       ids: ids.join(',')
     };
-    
+
     if (fields && fields.length > 0) {
       params.fields = fields.join(',');
     }
 
     const response = await this.client.get<{ value: WorkItem[] }>('/wit/workitems', { params });
     return response.data.value;
+  }
+
+  async addWorkItemRelation(payload: AddWorkItemRelationPayload): Promise<WorkItem> {
+    if (!this.client) {
+      throw new Error('Provider not initialized');
+    }
+
+    const relationTypeMap: Record<WorkItemRelationType, string> = {
+      parent: 'System.LinkTypes.Hierarchy-Reverse',
+      related: 'System.LinkTypes.Related',
+      predecessor: 'System.LinkTypes.Dependency-Reverse',
+      successor: 'System.LinkTypes.Dependency-Forward'
+    };
+
+    const relationType = relationTypeMap[payload.relationType];
+    const targetUrl = `${this.config.baseUrl}/${this.config.organization}/${this.config.project}/_apis/wit/workitems/${payload.targetWorkItemId}`;
+
+    const operation = {
+      op: 'add',
+      path: '/relations/-',
+      value: {
+        rel: relationType,
+        url: targetUrl,
+        ...(payload.comment && { attributes: { comment: payload.comment } })
+      }
+    };
+
+    const response = await this.client.patch<WorkItem>(
+      `/wit/workitems/${payload.workItemId}`,
+      [operation],
+      {
+        headers: {
+          'Content-Type': 'application/json-patch+json'
+        }
+      }
+    );
+
+    return response.data;
   }
 
   async executeWiql(query: WiqlQuery): Promise<WiqlResult> {
@@ -209,7 +247,7 @@ export class HttpProvider extends BaseProvider {
     }
 
     const patchDocument = [];
-    
+
     if (settings.cardReordering !== undefined) {
       patchDocument.push({
         op: 'replace',
@@ -217,7 +255,7 @@ export class HttpProvider extends BaseProvider {
         value: settings.cardReordering
       });
     }
-    
+
     if (settings.backlogVisibilities) {
       patchDocument.push({
         op: 'replace',
@@ -310,7 +348,7 @@ export class HttpProvider extends BaseProvider {
 
     const url = `/git/repositories/${repositoryId}/pullrequests`;
     const fullUrl = `${this.gitClient.defaults.baseURL}${url}`;
-    
+
     console.error(`[HTTP Provider] listPullRequests - Full URL: ${fullUrl}`);
     console.error(`[HTTP Provider] listPullRequests - Repository ID: ${repositoryId}`);
     console.error(`[HTTP Provider] listPullRequests - Status filter: ${status || 'none'}`);
@@ -350,7 +388,7 @@ export class HttpProvider extends BaseProvider {
 
     const url = `/git/repositories/${repositoryId}/pullrequests`;
     const fullUrl = `${this.gitClient.defaults.baseURL}${url}`;
-    
+
     console.error(`[HTTP Provider] createPullRequest - Full URL: ${fullUrl}`);
     console.error(`[HTTP Provider] createPullRequest - Repository ID: ${repositoryId}`);
     console.error(`[HTTP Provider] createPullRequest - Title: ${data.title}`);

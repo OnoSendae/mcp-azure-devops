@@ -1,4 +1,4 @@
-import { IProvider, ProviderHealth, WorkItem, CreateWorkItemPayload, UpdateWorkItemPayload, WiqlQuery, WiqlResult, Board, BoardsListResult, BoardSettings, TeamIteration, IterationCapacity, IterationWorkItems, CreateIterationPayload, PullRequest, PullRequestListResult, CreatePullRequestPayload, UpdatePullRequestPayload, MergePullRequestPayload, AddCommentPayload, AddReviewerPayload, PullRequestVotePayload, PullRequestThread, GitRepository, RepositoriesListResult, Team, TeamsListResult, TeamMember, TeamMembersResult, CreateTeamPayload, UpdateTeamPayload, AddTeamMemberPayload } from '../types';
+import { IProvider, ProviderHealth, WorkItem, CreateWorkItemPayload, UpdateWorkItemPayload, AddWorkItemRelationPayload, WiqlQuery, WiqlResult, Board, BoardsListResult, BoardSettings, TeamIteration, IterationCapacity, IterationWorkItems, CreateIterationPayload, PullRequest, PullRequestListResult, CreatePullRequestPayload, UpdatePullRequestPayload, MergePullRequestPayload, AddCommentPayload, AddReviewerPayload, PullRequestVotePayload, PullRequestThread, GitRepository, RepositoriesListResult, Team, TeamsListResult, TeamMember, TeamMembersResult, CreateTeamPayload, UpdateTeamPayload, AddTeamMemberPayload } from '../types';
 import { AzureDevOpsConfig } from '../config';
 
 export abstract class BaseProvider implements IProvider {
@@ -19,6 +19,7 @@ export abstract class BaseProvider implements IProvider {
   abstract updateWorkItem(id: number, payload: UpdateWorkItemPayload, useMarkdown?: boolean): Promise<WorkItem>;
   abstract deleteWorkItem(id: number): Promise<void>;
   abstract getWorkItems(ids: number[], fields?: string[]): Promise<WorkItem[]>;
+  abstract addWorkItemRelation(payload: AddWorkItemRelationPayload): Promise<WorkItem>;
   abstract executeWiql(query: WiqlQuery): Promise<WiqlResult>;
   abstract listBoards(): Promise<BoardsListResult>;
   abstract getBoard(boardId: string): Promise<Board>;
